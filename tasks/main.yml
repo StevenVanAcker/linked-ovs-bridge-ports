@@ -1,0 +1,37 @@
+---
+# create ports on an openvswitch and link them to other openvswitches
+#
+
+- name: install openvswitch
+  apt: pkg=openvswitch-switch
+
+- name: "create bridge {{ item.bridge }}"
+  openvswitch_bridge: bridge={{item.bridge}} state=present
+  with_items: ports
+
+- name: "adding openvswitch port {{ item.port }} to {{ item.bridge }}"
+  openvswitch_port: bridge={{ item.bridge }} port={{ item.port }} state=present
+  with_items: ports
+
+- name: "[{{item.bridge}}.{{item.port}}] check if uplink type is set to {{ item.type }}"
+  command: ovs-vsctl get interface {{ item.port }} type
+  register: uplinktype
+  changed_when: not uplinktype.stdout == "{{ item.type }}"
+  with_items: ports
+
+- name: "[{{item.item.bridge}}.{{item.item.port}}] setting uplink type to {{ item.item.type }}"
+  command: ovs-vsctl set interface {{ item.item.port }} type="{{ item.item.type }}"
+  when: item.changed
+  with_items: uplinktype.results
+
+- name: "[{{item.bridge}}.{{item.port}}] check if options:remote_ip is set to {{ item.dst }}"
+  command: ovs-vsctl get interface {{ item.port }} options
+  register: uplinkinterface
+  changed_when: not uplinkinterface.stdout == "{remote_ip=\"{{ item.dst }}\"}"
+  with_items: ports
+
+- name: "[{{item.item.bridge}}.{{item.item.port}}] setting options:remote_ip to {{ item.item.dst }}"
+  command: ovs-vsctl set interface {{ item.item.port }} options="remote_ip={{ item.item.dst }}"
+  when: item.changed
+  with_items: uplinkinterface.results
+
